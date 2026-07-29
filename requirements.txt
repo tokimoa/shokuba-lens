@@ -1,0 +1,4 @@
+mlx-vlm>=0.6.8
+mlx-lm>=0.31
+pyyaml
+pillow

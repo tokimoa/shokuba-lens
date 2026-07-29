@@ -1,0 +1,24 @@
+# shokuba-lens 業務ルール定義（オフィス5S・安全）
+# 自社のルールに合わせて自由に編集・追加してください
+domain: オフィス
+rules:
+  - id: aisle_clear
+    name: 通路の確保
+    description: 通路・動線上に箱、荷物、椅子などの障害物を置かない
+    severity: high
+  - id: fire_equipment_access
+    name: 消防設備前の空間確保
+    description: 消火器・消火栓・非常口の前に物を置かない
+    severity: critical
+  - id: cable_management
+    name: ケーブルの安全
+    description: 床を横切る電源ケーブル・LANケーブルは保護カバーで覆うか床下・壁沿いに配線する
+    severity: high
+  - id: stacking_safety
+    name: 積み上げの安全
+    description: 書類や箱を不安定に高く積み上げない（目安として3段まで）
+    severity: medium
+  - id: desk_tidiness
+    name: 机上の整頓
+    description: 使用していない書類・食器・私物が机上に放置されていない
+    severity: low

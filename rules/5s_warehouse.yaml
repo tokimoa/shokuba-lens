@@ -1,0 +1,18 @@
+domain: 倉庫
+rules:
+  - id: aisle_clear
+    name: 通路の確保
+    description: フォークリフト・台車の動線上に障害物を置かない
+    severity: critical
+  - id: fire_equipment_access
+    name: 消防設備前の空間確保
+    description: 消火器・消火栓・防火シャッターの前後に物を置かない
+    severity: critical
+  - id: rack_overload
+    name: ラックの過積載防止
+    description: ラック最上段からのはみ出し・崩れかけの荷姿がない
+    severity: high
+  - id: floor_marking
+    name: 区画線の遵守
+    description: 床の区画線（白線・黄線）の外に保管物がはみ出していない
+    severity: medium
