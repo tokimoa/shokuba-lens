@@ -110,12 +110,15 @@ def probe(image_path, question, vlm_model, max_tokens=200):
     return _vlm_generate(image_path, prompt, vlm_model, max_tokens)
 
 
-def observe_with_probes(image_path, rules, vlm_model):
-    """観察+ルール毎の追加質問をまとめた観察記録を返す。"""
+def observe_with_probes(image_path, rules, vlm_model, probe_model=None):
+    """観察+ルール毎の追加質問をまとめた観察記録を返す。
+
+    probe_model指定時は追加質問のみ専用モデルで行う（例: ヘルメット計数に
+    特化チューニングした2Bモデル。汎用VLMの過剰カウントを回避できる）。"""
     text = observe(image_path, vlm_model)
     for r in rules:
         if r.get("probe"):
-            ans = probe(image_path, r["probe"], vlm_model)
+            ans = probe(image_path, r["probe"], probe_model or vlm_model)
             text += f"\n\n追加確認（{r['name']}）: {r['probe']} → {ans}"
     return text
 
@@ -214,6 +217,8 @@ def main():
     ap.add_argument("--images", nargs="+", required=True)
     ap.add_argument("--rules", default="rules/5s_office.yaml")
     ap.add_argument("--vlm-model", default=DEFAULT_VLM)
+    ap.add_argument("--probe-model", default=None,
+                    help="追加確認（probe）専用のVLM。特化チューニング済みモデルを指す想定")
     ap.add_argument("--llm-model", default=DEFAULT_LLM)
     ap.add_argument("--out", default="out")
     args = ap.parse_args()
@@ -227,7 +232,7 @@ def main():
     for img in args.images:
         name = Path(img).name
         print(f"[観察] {name} ...", flush=True)
-        observations[name] = observe_with_probes(img, rules, args.vlm_model)
+        observations[name] = observe_with_probes(img, rules, args.vlm_model, args.probe_model)
         (outdir / f"{Path(img).stem}_observations.txt").write_text(observations[name])
     unload_vlm()
 
