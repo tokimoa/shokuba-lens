@@ -24,6 +24,7 @@ OBSERVE_PROMPT = (
     "箇条書きで具体的に記述してください。通路や設備の上・前に物がある場合は、"
     "その位置関係を明記してください。危険箇所（開口部・火気・配線など）は、"
     "柵・カバーなどの保護設備が見えるかどうかも書いてください。"
+    "人が写っている場合は、一人ずつヘルメット・保護具を着用しているかどうかを明記してください。"
     "推測や評価は書かず、見えている事実のみを書いてください。"
 )
 
@@ -38,7 +39,7 @@ JUDGE_PROMPT = """あなたは職場の安全・整理整頓の点検担当で�
 
 # 出力形式
 次のJSONオブジェクトのみを出力してください（説明文は不要。キーはこの順で）:
-{{"evidence": "観察記録から引用した、このルールに関係する記述（なければ空文字)",
+{{"evidence": "観察記録から引用した、判定の決め手となる記述（「追加確認」の回答も含む。なければ空文字)",
   "reason": "evidenceがルールに違反しているかどうかの短い理由づけ",
   "judgement": "違反疑い|問題なし|判定不能",
   "suggestion": "違反疑いの場合の具体的な改善提案（それ以外は空文字）"}}
@@ -84,17 +85,39 @@ def load_llm(llm_model):
     return _LLM_CACHE[llm_model]
 
 
-def observe(image_path, vlm_model, max_tokens=600):
+def _vlm_generate(image_path, prompt_text, vlm_model, max_tokens):
     from mlx_vlm import generate
     from mlx_vlm.prompt_utils import apply_chat_template
 
     model, processor, config = load_vlm(vlm_model)
-    prompt = apply_chat_template(processor, config, OBSERVE_PROMPT, num_images=1)
+    prompt = apply_chat_template(processor, config, prompt_text, num_images=1)
     out = generate(model, processor, prompt, image=[str(image_path)],
                    max_tokens=max_tokens, temperature=0.0, repetition_penalty=1.1, verbose=False)
     text = out.text if hasattr(out, "text") else str(out)
     text = re.sub(r"<\|[a-z_]+\|>", " ", text)  # チャットテンプレートの残渣を除去
     return text.strip()
+
+
+def observe(image_path, vlm_model, max_tokens=600):
+    return _vlm_generate(image_path, OBSERVE_PROMPT, vlm_model, max_tokens)
+
+
+def probe(image_path, question, vlm_model, max_tokens=200):
+    """ルール連動の追加質問。自由記述の観察は不在事実（未着用など）を書き落とすため、
+    直接質問で確認する。回答は観察記録に「追加確認」として追記され、判定の入力になる。"""
+    prompt = (f"この画像について、見えている事実のみに基づいて次の質問に簡潔に答えてください。\n"
+              f"質問: {question}")
+    return _vlm_generate(image_path, prompt, vlm_model, max_tokens)
+
+
+def observe_with_probes(image_path, rules, vlm_model):
+    """観察+ルール毎の追加質問をまとめた観察記録を返す。"""
+    text = observe(image_path, vlm_model)
+    for r in rules:
+        if r.get("probe"):
+            ans = probe(image_path, r["probe"], vlm_model)
+            text += f"\n\n追加確認（{r['name']}）: {r['probe']} → {ans}"
+    return text
 
 
 VERIFY_PROMPT = """次の点検判定が正しいかを検証してください。
@@ -107,15 +130,15 @@ VERIFY_PROMPT = """次の点検判定が正しいかを検証してください�
 - 理由(reason): {reason}
 
 # 検証の観点
-1. evidenceは、ルール違反の状態を「直接」示していますか？
-   （「カバー付き」「着用している」「施錠済み」など、むしろ適合を示す記述なら判定は誤りです）
-2. 「記述がない・見つからない」ことを根拠にしていませんか？（不在の記述は違反の証拠になりません）
+1. evidenceとreasonを合わせて見たとき、ルール違反の状態（未着用・放置・カバーなし等）を示す観察記述に基づいていますか？
+2. 適合を示す記述（「カバー付き」「着用している」「施錠済み」など）だけを根拠に違反としていませんか？
+3. 「記述がない・見つからない」ことだけを根拠にしていませんか？（不在の記述は違反の証拠になりません）
 
 # 出力形式（JSONのみ）
 {{"verdict": "支持|棄却", "why": "1文の理由"}}"""
 
 
-def judge(observations, rules, llm_model, max_tokens=500):
+def judge(observations, rules, llm_model, max_tokens=800):
     """ルール毎に個別のLLMコールで判定し、「違反疑い」のみ検証コールで敵対的に再確認する。
 
     ルール毎の個別判定は複数ルール同時照合のコンテキスト干渉（別ルールの根拠取り違え・
@@ -204,7 +227,7 @@ def main():
     for img in args.images:
         name = Path(img).name
         print(f"[観察] {name} ...", flush=True)
-        observations[name] = observe(img, args.vlm_model)
+        observations[name] = observe_with_probes(img, rules, args.vlm_model)
         (outdir / f"{Path(img).stem}_observations.txt").write_text(observations[name])
     unload_vlm()
 
