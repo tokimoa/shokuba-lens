@@ -58,13 +58,18 @@ _LLM_CACHE = {}
 
 
 def load_vlm(vlm_model):
-    """VLMを一度だけロードして使い回す（複数画像・動画フレームの連続処理用）。"""
+    """VLMを一度だけロードして使い回す（複数画像・動画フレームの連続処理用）。
+
+    リポジトリにadapters.safetensorsが同梱されている場合は自動で適用する
+    （量子化ベース+アダプタ構成のモデルを1つのIDで配布できる）。"""
     if vlm_model not in _VLM_CACHE:
         from mlx_vlm import load
-        from mlx_vlm.utils import load_config
+        from mlx_vlm.utils import get_model_path, load_config
 
-        model, processor = load(vlm_model, trust_remote_code=True)
-        config = load_config(vlm_model, trust_remote_code=True)
+        model_path = get_model_path(vlm_model)
+        adapter = str(model_path) if (Path(model_path) / "adapters.safetensors").exists() else None
+        model, processor = load(str(model_path), adapter_path=adapter, trust_remote_code=True)
+        config = load_config(str(model_path), trust_remote_code=True)
         _VLM_CACHE[vlm_model] = (model, processor, config)
     return _VLM_CACHE[vlm_model]
 
