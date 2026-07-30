@@ -1,0 +1,22 @@
+domain: 情報セキュリティ（クリアデスク・クリアスクリーン）
+rules:
+  - id: no_unattended_documents
+    name: 機密書類の放置禁止
+    description: 離席中の机の上に書類を放置しない（機密・個人情報の閲覧防止）
+    severity: critical
+  - id: screen_lock
+    name: 離席時の画面ロック
+    description: 離席中のPCは画面をロックする（画面が表示されたまま放置しない）
+    severity: critical
+  - id: media_locked_storage
+    name: 外部媒体の施錠保管
+    description: 机上にUSBメモリ・外付けディスク等の記録媒体を放置しない（記録媒体は施錠保管する）
+    severity: high
+  - id: whiteboard_erased
+    name: ホワイトボードの消去
+    description: 使用後のホワイトボードは記載内容を消去する
+    severity: medium
+  - id: cabinet_key
+    name: キャビネットの鍵管理
+    description: 書庫・キャビネットの鍵を挿したまま放置しない
+    severity: medium

@@ -1,0 +1,22 @@
+domain: 厨房・食品衛生
+rules:
+  - id: raw_cooked_separation
+    name: 生食材と調理済み食品の分離
+    description: 生肉・生魚と調理済み食品・生食用食材を隣接させて置かない（交差汚染防止）
+    severity: critical
+  - id: floor_dry
+    name: 床の乾燥維持
+    description: 床の水濡れ・油汚れを放置しない（転倒事故防止）
+    severity: high
+  - id: waste_bin_lid
+    name: ゴミ箱の蓋
+    description: 厨房内のゴミ箱は蓋付きとし、蓋を閉めた状態を保つ
+    severity: medium
+  - id: fridge_temperature
+    name: 冷蔵庫の温度管理
+    description: 冷蔵庫は温度計を設置し、庫内温度を7℃以下に保つ
+    severity: high
+  - id: soap_at_sink
+    name: 手洗い設備の石けん常備
+    description: 手洗いシンクに石けん（ハンドソープ）を常備する
+    severity: medium

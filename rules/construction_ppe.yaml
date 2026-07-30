@@ -1,0 +1,22 @@
+domain: 建設現場
+rules:
+  - id: helmet_required
+    name: ヘルメット着用
+    description: 作業エリア内の作業者は全員ヘルメット（保護帽）を着用する
+    severity: critical
+  - id: opening_guard
+    name: 開口部の養生
+    description: 床の開口部・段差には手すり・柵または養生蓋を設置する
+    severity: critical
+  - id: material_storage
+    name: 資材の仮置き
+    description: 資材は通路を塞がず、高さ1.5m以内で崩れないように仮置きする
+    severity: high
+  - id: fire_watch
+    name: 火気作業の消火準備
+    description: 溶接・切断など火気作業を行う場所の近くに消火器を配置する
+    severity: high
+  - id: cord_protection
+    name: 仮設配線の保護
+    description: 通路を横切る仮設配線は保護カバーで覆うか吊り上げる
+    severity: medium

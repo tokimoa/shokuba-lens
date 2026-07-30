@@ -16,72 +16,143 @@ from pathlib import Path
 import yaml
 
 DEFAULT_VLM = "tokimoa/llm-jp-4-vl-9b-beta-mlx-4bit"
-DEFAULT_LLM = "Qwen/Qwen3-4B"
+DEFAULT_LLM = "mlx-community/Qwen3-8B-4bit"
 
 OBSERVE_PROMPT = (
     "この画像は職場の様子です。安全点検の下調べとして、画像に写っているものと"
     "状況を、位置関係（何がどこにあるか・何の前に何があるか）を含めて"
     "箇条書きで具体的に記述してください。通路や設備の上・前に物がある場合は、"
-    "その位置関係を明記してください。推測や評価は書かず、見えている事実のみを書いてください。"
+    "その位置関係を明記してください。危険箇所（開口部・火気・配線など）は、"
+    "柵・カバーなどの保護設備が見えるかどうかも書いてください。"
+    "推測や評価は書かず、見えている事実のみを書いてください。"
 )
 
-JUDGE_PROMPT = """あなたは職場の安全・整理整頓（5S）の点検担当です。
-以下の「観察記録」を「点検ルール」と照合し、ルールごとに判定してください。
+JUDGE_PROMPT = """あなたは職場の安全・整理整頓の点検担当です。
+以下の「観察記録」を、次の1つの点検ルールと照合して判定してください。
 
 # 点検ルール
-{rules}
+{rule}
 
 # 観察記録
 {observations}
 
 # 出力形式
-次のJSON配列のみを出力してください（説明文は不要）:
-[{{"rule_id": "ルールID", "judgement": "違反疑い|問題なし|判定不能",
-   "evidence": "観察記録内の根拠（判定不能なら空文字）",
-   "suggestion": "違反疑いの場合の具体的な改善提案（それ以外は空文字）"}}]
+次のJSONオブジェクトのみを出力してください（説明文は不要。キーはこの順で）:
+{{"evidence": "観察記録から引用した、このルールに関係する記述（なければ空文字)",
+  "reason": "evidenceがルールに違反しているかどうかの短い理由づけ",
+  "judgement": "違反疑い|問題なし|判定不能",
+  "suggestion": "違反疑いの場合の具体的な改善提案（それ以外は空文字）"}}
 
-観察記録に関連する記述がないルールは「判定不能」としてください。根拠のない推測で「違反疑い」にしないでください。
-ルールに数値基準（段数・距離など）がある場合は厳密に適用し、基準の範囲内であれば「問題なし」としてください。"""
+判定の規律:
+- evidenceは観察記録に実際に書かれている記述の引用に限ります
+- 観察記録にこのルールに関係する記述がなければ「判定不能」です。根拠のない推測で「違反疑い」にしないでください
+- 設備や対策の記述が観察記録にないことは「存在しない」ことの証拠にはなりません（その場合は「判定不能」）
+- ルールに複数の条件がある場合、どれか1つに違反する記述があれば「違反疑い」です
+- ルールに数値基準（段数・高さなど）がある場合は厳密に適用し、基準の範囲内なら「問題なし」です
+- judgementはreasonの結論と一致させてください"""
+
+
+_VLM_CACHE = {}
+_LLM_CACHE = {}
+
+
+def load_vlm(vlm_model):
+    """VLMを一度だけロードして使い回す（複数画像・動画フレームの連続処理用）。"""
+    if vlm_model not in _VLM_CACHE:
+        from mlx_vlm import load
+        from mlx_vlm.utils import load_config
+
+        model, processor = load(vlm_model, trust_remote_code=True)
+        config = load_config(vlm_model, trust_remote_code=True)
+        _VLM_CACHE[vlm_model] = (model, processor, config)
+    return _VLM_CACHE[vlm_model]
+
+
+def unload_vlm():
+    """判定フェーズ前にVLMを解放してメモリを空ける。"""
+    import gc
+
+    _VLM_CACHE.clear()
+    gc.collect()
+
+
+def load_llm(llm_model):
+    if llm_model not in _LLM_CACHE:
+        from mlx_lm import load
+
+        _LLM_CACHE[llm_model] = load(llm_model)
+    return _LLM_CACHE[llm_model]
 
 
 def observe(image_path, vlm_model, max_tokens=600):
-    from mlx_vlm import generate, load
+    from mlx_vlm import generate
     from mlx_vlm.prompt_utils import apply_chat_template
-    from mlx_vlm.utils import load_config
 
-    model, processor = load(vlm_model, trust_remote_code=True)
-    config = load_config(vlm_model, trust_remote_code=True)
+    model, processor, config = load_vlm(vlm_model)
     prompt = apply_chat_template(processor, config, OBSERVE_PROMPT, num_images=1)
     out = generate(model, processor, prompt, image=[str(image_path)],
                    max_tokens=max_tokens, temperature=0.0, repetition_penalty=1.1, verbose=False)
     text = out.text if hasattr(out, "text") else str(out)
     text = re.sub(r"<\|[a-z_]+\|>", " ", text)  # チャットテンプレートの残渣を除去
-    del model
-    import gc
-
-    gc.collect()
     return text.strip()
 
 
-def judge(observations, rules, llm_model, max_tokens=1200):
-    from mlx_lm import load
+VERIFY_PROMPT = """次の点検判定が正しいかを検証してください。
+
+# 点検ルール
+{rule}
+
+# 判定（違反疑い）
+- 根拠(evidence): {evidence}
+- 理由(reason): {reason}
+
+# 検証の観点
+1. evidenceは、ルール違反の状態を「直接」示していますか？
+   （「カバー付き」「着用している」「施錠済み」など、むしろ適合を示す記述なら判定は誤りです）
+2. 「記述がない・見つからない」ことを根拠にしていませんか？（不在の記述は違反の証拠になりません）
+
+# 出力形式（JSONのみ）
+{{"verdict": "支持|棄却", "why": "1文の理由"}}"""
+
+
+def judge(observations, rules, llm_model, max_tokens=500):
+    """ルール毎に個別のLLMコールで判定し、「違反疑い」のみ検証コールで敵対的に再確認する。
+
+    ルール毎の個別判定は複数ルール同時照合のコンテキスト干渉（別ルールの根拠取り違え・
+    条件無視・自己矛盾）を構造的に排除する。検証コールは「適合を示す根拠からの違反判定」
+    「不在の記述を根拠にした違反判定」の2大誤検知パターンを棄却する。
+    """
     from mlx_lm.generate import generate
     from mlx_lm.sample_utils import make_sampler
 
-    model, tokenizer = load(llm_model)
-    rules_text = "\n".join(
-        f"- {r['id']}（{r['name']}・重大度{r['severity']}）: {r['description']}" for r in rules
-    )
-    prompt = JUDGE_PROMPT.format(rules=rules_text, observations=observations)
-    msgs = [{"role": "user", "content": prompt}]
-    p = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True,
-                                      enable_thinking=False)
-    out = generate(model, tokenizer, prompt=p, max_tokens=max_tokens,
-                   sampler=make_sampler(temp=0.0))
-    m = re.search(r"\[.*\]", out, re.DOTALL)
-    if not m:
-        raise ValueError(f"判定のJSONが取得できませんでした: {out[:200]}")
-    return json.loads(m.group(0))
+    model, tokenizer = load_llm(llm_model)
+
+    def ask(prompt, max_tok):
+        msgs = [{"role": "user", "content": prompt}]
+        p = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True,
+                                          enable_thinking=False)
+        out = generate(model, tokenizer, prompt=p, max_tokens=max_tok,
+                       sampler=make_sampler(temp=0.0))
+        m = re.search(r"\{.*\}", out, re.DOTALL)
+        if not m:
+            raise ValueError(f"判定のJSONが取得できませんでした: {out[:200]}")
+        return json.loads(m.group(0))
+
+    verdicts = []
+    for r in rules:
+        rule_text = f"{r['id']}（{r['name']}・重大度{r['severity']}）: {r['description']}"
+        v = ask(JUDGE_PROMPT.format(rule=rule_text, observations=observations), max_tokens)
+        v["rule_id"] = r["id"]
+        if v.get("judgement") == "違反疑い":
+            check = ask(VERIFY_PROMPT.format(rule=rule_text,
+                                             evidence=v.get("evidence", ""),
+                                             reason=v.get("reason", "")), 200)
+            if check.get("verdict") != "支持":
+                v["judgement"] = "判定不能"
+                v["suggestion"] = ""
+                v["verify_note"] = check.get("why", "")
+        verdicts.append(v)
+    return verdicts
 
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -109,6 +180,12 @@ def render_markdown(results, rules_by_id, domain):
     return "\n".join(lines)
 
 
+def load_rules(path):
+    ruleset = yaml.safe_load(open(path))
+    rules = ruleset["rules"]
+    return ruleset, rules, {r["id"]: r for r in rules}
+
+
 def main():
     ap = argparse.ArgumentParser(description="職場写真のローカルAI点検")
     ap.add_argument("--images", nargs="+", required=True)
@@ -118,21 +195,23 @@ def main():
     ap.add_argument("--out", default="out")
     args = ap.parse_args()
 
-    ruleset = yaml.safe_load(open(args.rules))
-    rules = ruleset["rules"]
-    rules_by_id = {r["id"]: r for r in rules}
+    ruleset, rules, rules_by_id = load_rules(args.rules)
     outdir = Path(args.out)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    results = {}
+    # 観察→判定の順にフェーズをまとめ、モデルロードを各1回にする
+    observations = {}
     for img in args.images:
         name = Path(img).name
         print(f"[観察] {name} ...", flush=True)
-        obs = observe(img, args.vlm_model)
+        observations[name] = observe(img, args.vlm_model)
+        (outdir / f"{Path(img).stem}_observations.txt").write_text(observations[name])
+    unload_vlm()
+
+    results = {}
+    for name, obs in observations.items():
         print(f"[照合] {name} ...", flush=True)
-        verdicts = judge(obs, rules, args.llm_model)
-        results[name] = verdicts
-        (outdir / f"{Path(img).stem}_observations.txt").write_text(obs)
+        results[name] = judge(obs, rules, args.llm_model)
 
     md = render_markdown(results, rules_by_id, ruleset.get("domain", ""))
     (outdir / "report.md").write_text(md)
