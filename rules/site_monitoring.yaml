@@ -1,0 +1,12 @@
+domain: 現場監視
+rules:
+- id: fire_smoke
+  name: 火・煙の発生
+  description: 現場内で管理されていない火・煙が発生していない（火気作業の管理範囲を除く）
+  severity: critical
+  probe: この画像に火（炎）または煙が見えますか。「火:あり」「火:なし」「煙:あり」「煙:なし」を組み合わせ、「火:○○、煙:○○」の形式で答えてください。
+- id: person_down
+  name: 転倒者の発生
+  description: 倒れている人がいない（体調不良・転倒事故の早期発見）
+  severity: critical
+  probe: この画像に倒れている人はいますか。「転倒:N人」の形式で答えてください。

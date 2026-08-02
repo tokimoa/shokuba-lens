@@ -1,5 +1,20 @@
 domain: 厨房・食品衛生
 rules:
+  - id: hairnet_required
+    name: ヘアネット着用
+    description: 調理場内の作業者は毛髪混入防止のためヘアネット（衛生帽）を着用する
+    severity: high
+    probe: この画像に写っている人のヘアネット（衛生帽）着用状況を数えてください。「着用:N人、未着用:N人」の形式で答えてください。
+  - id: mask_required
+    name: マスク着用
+    description: 調理場内の作業者は飛沫防止のためマスクを正しく着用する
+    severity: high
+    probe: この画像に写っている人のマスク着用状況を数えてください。「着用:N人、未着用:N人、不適切:N人」の形式で答えてください。
+  - id: glove_required
+    name: 手袋着用
+    description: 調理済み食品・生食用食材を扱うときは使い捨て手袋を着用する
+    severity: medium
+    probe: この画像で手袋の着用状況を、手の数で数えてください。「手袋:N、素手:N」の形式で答えてください。
   - id: raw_cooked_separation
     name: 生食材と調理済み食品の分離
     description: 生肉・生魚と調理済み食品・生食用食材を隣接させて置かない（交差汚染防止）

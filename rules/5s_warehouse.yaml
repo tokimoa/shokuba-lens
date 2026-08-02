@@ -8,6 +8,7 @@ rules:
     name: 消防設備前の空間確保
     description: 消火器・消火栓・防火シャッターの前後に物を置かない
     severity: critical
+    probe: この画像に消火器はいくつ見えますか。「消火器:N本」の形式で答えてください。
   - id: rack_overload
     name: ラックの過積載防止
     description: ラック最上段からのはみ出し・崩れかけの荷姿がない
