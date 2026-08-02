@@ -76,7 +76,7 @@ def kitchen_clean(path):
 
 
 def construction_violations(path):
-    """GT違反: helmet_required, opening_guard, material_storage / 適合: fire_watch, cord_protection"""
+    """GT違反: helmet_required, vest_required, opening_guard, material_storage / 適合: fire_watch, cord_protection"""
     img = Image.new("RGB", (1000, 700), (243, 242, 235))
     d = ImageDraw.Draw(img)
     d.text((20, 15), "建設現場 模式図（俯瞰）", font=f(26), fill=(30, 30, 30))
@@ -102,18 +102,27 @@ def construction_violations(path):
     d.line([(400, 660), (950, 660)], fill=(90, 90, 90), width=10)
     d.text((500, 620), "仮設配線（保護カバー付き）", font=f(16), fill=(70, 70, 70))
     img.save(path)
-    print(f"saved {path}  GT違反: helmet_required, opening_guard, material_storage")
+    print(f"saved {path}  GT違反: helmet_required, vest_required, opening_guard, material_storage")
 
 
 def construction_clean(path):
-    """GT: 全ルール適合"""
+    """GT: 全ルール適合（安全ベストも着用）"""
     img = Image.new("RGB", (1000, 700), (243, 242, 235))
     d = ImageDraw.Draw(img)
     d.text((20, 15), "建設現場 模式図（俯瞰）", font=f(26), fill=(30, 30, 30))
-    d.ellipse([150, 120, 210, 180], fill=(240, 200, 60), outline=(160, 130, 30), width=4)
-    d.text((120, 190), "作業者A（ヘルメット着用）", font=f(16), fill=(60, 110, 60))
-    d.ellipse([320, 120, 380, 180], fill=(240, 200, 60), outline=(160, 130, 30), width=4)
-    d.text((300, 190), "作業者B（ヘルメット着用）", font=f(16), fill=(60, 110, 60))
+    # 訓練データ（gen_schematic.py draw_worker）と同一ジオメトリの人型
+    for wx, name in [(170, "A"), (340, "B")]:
+        y = 130
+        d.ellipse([wx, y, wx + 28, y + 28], fill=(230, 200, 170),
+                  outline=(120, 90, 60), width=2)
+        d.pieslice([wx - 3, y - 8, wx + 31, y + 22], 180, 360,
+                   fill=(240, 200, 60), outline=(160, 130, 30), width=2)
+        d.rectangle([wx + 2, y + 30, wx + 26, y + 78], fill=(255, 140, 40),
+                    outline=(70, 80, 100), width=2)
+        d.line([wx + 8, y + 34, wx + 8, y + 74], fill=(230, 230, 90), width=3)
+        d.line([wx + 20, y + 34, wx + 20, y + 74], fill=(230, 230, 90), width=3)
+        d.text((wx - 55, y + 84), f"作業者{name}（ヘルメット着用・ベスト着用）",
+               font=f(16), fill=(60, 110, 60))
     d.rectangle([600, 120, 800, 260], fill=(60, 60, 70), outline=(200, 60, 60), width=4)
     d.text((640, 175), "床開口部", font=f(20), fill=(240, 240, 240))
     d.rectangle([580, 100, 820, 280], outline=(230, 180, 60), width=6)
