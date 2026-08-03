@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .analyze import (DEFAULT_LLM, DEFAULT_VLM, SEV_MARK, SEV_ORDER, judge,
-                      load_rules, observe, unload_vlm)
+                      load_rules, observe, observe_with_probes, unload_vlm)
 
 
 def extract_frames(video, outdir, fps, max_frames):
@@ -99,6 +99,9 @@ def main():
     ap.add_argument("--max-frames", type=int, default=30)
     ap.add_argument("--vlm-model", default=DEFAULT_VLM)
     ap.add_argument("--llm-model", default=DEFAULT_LLM)
+    ap.add_argument("--probe-model", default=None,
+                    help="追加確認（probe）専用のVLM。静止画のanalyzeと同じく、"
+                         "ルールのprobe質問をフレーム毎に投げて判定の入力に加える")
     ap.add_argument("--out", default="out_video")
     args = ap.parse_args()
 
@@ -113,7 +116,11 @@ def main():
         observations = []
         for t, p in frames:
             print(f"[観察 {fmt_time(t)}] ...", flush=True)
-            observations.append((t, observe(p, args.vlm_model)))
+            if args.probe_model:
+                obs = observe_with_probes(p, rules, args.vlm_model, args.probe_model)
+            else:
+                obs = observe(p, args.vlm_model)
+            observations.append((t, obs))
         unload_vlm()
 
     per_frame = []
