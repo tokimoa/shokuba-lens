@@ -122,9 +122,14 @@ def observe_with_probes(image_path, rules, vlm_model, probe_model=None):
     特化チューニングした2Bモデル。汎用VLMの過剰カウントを回避できる）。"""
     text = observe(image_path, vlm_model)
     for r in rules:
-        if r.get("probe"):
-            ans = probe(image_path, r["probe"], probe_model or vlm_model)
-            text += f"\n\n追加確認（{r['name']}）: {r['probe']} → {ans}"
+        questions = r.get("probe")
+        if not questions:
+            continue
+        if isinstance(questions, str):
+            questions = [questions]
+        for q in questions:
+            ans = probe(image_path, q, probe_model or vlm_model)
+            text += f"\n\n追加確認（{r['name']}）: {q} → {ans}"
     return text
 
 
