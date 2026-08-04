@@ -7,7 +7,7 @@
 → Markdownレポート + JSON（指摘・根拠・改善提案。動画は検出時刻つき）
 ```
 
-すべて手元のマシンで完結し、**画像は外部に送信しません**。大規模GPUも不要で、Apple Silicon Mac（16GB以上推奨）で動作します。安全・整理整頓（5S）チェックを題材にしていますが、ルールはYAMLで自由に差し替えられます。
+すべて手元のマシンで完結し、**画像は外部に送信しません**。大規模GPUも不要で、Apple Silicon Mac（16GB以上推奨）で動作します。オフィス5S・倉庫・厨房衛生・建設PPE・情報セキュリティ・現場監視（動画）の6ドメインのルールを同梱していますが、ルールはYAMLで自由に差し替えられます。
 
 ## 使い方
 
@@ -60,15 +60,16 @@ rules:
     severity: high   # critical / high / medium / low
 ```
 
-数値基準（「3段まで」「高さ1.5m以内」等）をdescriptionに書けば、判定時に厳密に適用されます。同梱ルールセットは5種です:
+数値基準（「3段まで」「高さ1.5m以内」等）をdescriptionに書けば、判定時に厳密に適用されます。同梱ルールセットは6種です:
 
 | ファイル | ドメイン |
 |---|---|
 | `rules/5s_office.yaml` | オフィス5S |
-| `rules/5s_warehouse.yaml` | 倉庫 |
-| `rules/kitchen_hygiene.yaml` | 厨房・食品衛生 |
-| `rules/construction_ppe.yaml` | 建設現場（ヘルメット・開口部・資材） |
+| `rules/5s_warehouse.yaml` | 倉庫（フォークリフト・パレットトラックのprobeつき） |
+| `rules/kitchen_hygiene.yaml` | 厨房・食品衛生（ヘアネット・マスク・手袋のprobeつき） |
+| `rules/construction_ppe.yaml` | 建設現場（ヘルメット・安全ベスト・安全帯のprobeつき） |
 | `rules/clear_desk.yaml` | 情報セキュリティ（クリアデスク・クリアスクリーン） |
+| `rules/site_monitoring.yaml` | 現場監視（火・煙、転倒者。動画向け） |
 
 書き方のコツ（開発時の実測より）: 違反条件を文の先頭に書いてください。「Aを放置しない（Bは施錠保管）」のように禁止事項を先に置くと、複数条件ルールの判定が安定します。
 
@@ -78,13 +79,13 @@ rules:
 
 | 評価データ | 構成 | precision | recall | F1 |
 |---|---|---|---|---|
-| [SHEL5K](https://data.mendeley.com/datasets/9rcv8mm682/4) テスト400枚 | **[shokuba-probe-2b](https://huggingface.co/tokimoa/shokuba-probe-2b)**（probe） | **0.938** | **0.755** | **0.837** |
+| [SHEL5K](https://data.mendeley.com/datasets/9rcv8mm682/4) テスト400枚 | **[shokuba-probe-2b](https://huggingface.co/tokimoa/shokuba-probe-2b)**（probe） | **0.930** | **0.800** | **0.860** |
 | 〃 | ベースQwen3-VL-2B（未チューニング） | 0.589 | 0.465 | 0.520 |
 | 〃 | 汎用VLM（llm-jp-4-vl 9B）probe | 0.57前後 | 0.95前後 | 0.72前後 |
-| Construction Site Safety 144枚（学習と別データセット） | shokuba-probe-2b | 0.684 | 0.629 | 0.655 |
+| [SHWD](https://github.com/njvisionpower/Safety-Helmet-Wearing-Dataset) 150枚（学習に一切不使用・画像重複なしをハッシュ検証） | shokuba-probe-2b | 0.960 | 0.960 | 0.960 |
 
 - 汎用VLMは「見逃さないが数え過ぎる」（クリーン画像でも未着用と誤報告しがち）、shokuba-probe-2bは点検データでの学習によりバランス型です
-- 別データセットでは精度が下がります（分布依存）。汎化は継続学習で強化していく予定で、モデルは同名のまま更新します
+- shokuba-probe-2bはヘルメット以外にも安全ベスト・安全帯・火/煙・消火器・転倒・マスク・ヘアネット・手袋・フォークリフト・パレットトラック・カゴパレットの**12種の点検質問**に対応しています（ドメイン別の実測は[モデルカード](https://huggingface.co/tokimoa/shokuba-probe-2b)参照）。モデルは同名のまま継続学習で更新します
 - 再現手順は `bench/` に同梱（`bench/shel5k.py`）。モデル差し替えで再実測できます
 
 ## ルール連動の追加確認（probe）
@@ -100,6 +101,8 @@ rules:
 ```
 
 probeの書き方も実測で効果が分かれます: 数えさせる形式が最も見逃しに強く、「確認できない場合はそう答えて」と逃げ道を与えると大半が「確認できない」に流れ、位置の特定まで求めると「全員着用」に振れます。
+
+probeは `--probe-model tokimoa/shokuba-probe-2b` で点検特化の2Bモデルに差し替えられます（推奨・約1.7GB）。同梱6ドメインのprobeはすべてこのモデルの対応質問形式で書いてあります。動画でも `python -m shokuba_lens.video --probe-model ...` で同様に使え、実測では汎用VLM観察のみで5フレームに出た火・煙の誤検出が、probe注入で0件になりました。転倒質問は学習と分離した監視カメラ実映像480フレームで誤検知0件です。
 
 ## 設計メモ
 
